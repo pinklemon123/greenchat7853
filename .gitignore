@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+dist
+.env
+.env.*
+!.env.example
+.vercel
+coverage
+*.log
+.venv
+.venv311
+__pycache__
+api_test.py

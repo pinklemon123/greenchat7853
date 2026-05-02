@@ -296,6 +296,7 @@ button {
 .searchbar input,
 .large-search input,
 .chat-composer input,
+.model-picker select,
 textarea {
   color: var(--ink);
   background: rgba(0, 0, 0, 0.14);
@@ -577,6 +578,23 @@ textarea {
 .chat-sidebar p {
   margin: 0 0 12px;
   line-height: 1.7;
+}
+
+.model-picker {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.model-picker select {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+}
+
+.model-picker option {
+  color: #071512;
+  background: #f3fbf7;
 }
 
 .chat-main {

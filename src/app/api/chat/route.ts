@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { completeChat, sourceContext } from "@/lib/llm";
+import { configuredModel } from "@/lib/openai";
 import { searchTavily } from "@/lib/tavily";
 import type { ChatMessage, NewsResult } from "@/lib/types";
 
@@ -10,6 +11,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const messages = (body.messages ?? []) as ChatMessage[];
     const webSearch = body.webSearch !== false;
+    const model = typeof body.model === "string" ? body.model : undefined;
     const lastUser = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
     let sources: NewsResult[] = [];
 
@@ -32,10 +34,11 @@ export async function POST(request: Request) {
         },
         ...messages.slice(-8)
       ],
-      0.35
+      0.35,
+      model
     );
 
-    return NextResponse.json({ message, sources });
+    return NextResponse.json({ message, sources, model: model ?? configuredModel() });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Chat failed" },

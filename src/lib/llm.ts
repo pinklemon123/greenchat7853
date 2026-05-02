@@ -1,4 +1,5 @@
 import type { ChatMessage, NewsResult } from "./types";
+import { configuredModel, openAIEndpoint } from "./openai";
 
 type ChatCompletionResponse = {
   choices?: Array<{
@@ -8,16 +9,15 @@ type ChatCompletionResponse = {
   }>;
 };
 
-export async function completeChat(messages: ChatMessage[], temperature = 0.3) {
+export async function completeChat(messages: ChatMessage[], temperature = 0.3, requestedModel?: string) {
   const apiKey = process.env.OPENAI_API_KEY;
-  const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.gpt.ge";
-  const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+  const model = requestedModel?.trim() || configuredModel();
 
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not configured");
   }
 
-  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
+  const response = await fetch(openAIEndpoint("chat/completions"), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,

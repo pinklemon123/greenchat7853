@@ -46,6 +46,11 @@ type ChatMessage = {
   content: string;
 };
 
+type ModelListResponse = {
+  models?: string[];
+  current?: string;
+};
+
 const navItems: Array<{ key: PageKey; label: string; icon: typeof Home; description: string }> = [
   { key: "home", label: "主页", icon: Home, description: "项目入口和能力总览" },
   { key: "news", label: "搜索新闻", icon: Newspaper, description: "Tavily 联网新闻检索" },
@@ -79,6 +84,8 @@ export default function HomePage() {
     { role: "assistant", content: "你好，我可以基于联网新闻、文学与哲学知识来源回答问题，也可以帮你生成文章草稿。" }
   ]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [modelOptions, setModelOptions] = useState<string[]>(["o3"]);
+  const [selectedModel, setSelectedModel] = useState("o3");
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -86,6 +93,31 @@ export default function HomePage() {
 
   useEffect(() => {
     void createAnonymousSession();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadModels() {
+      try {
+        const res = await fetch("/api/models", { cache: "no-store" });
+        const data = (await res.json()) as ModelListResponse;
+        const models = data.models?.length ? data.models : ["o3"];
+        if (cancelled) return;
+        setModelOptions(models);
+        setSelectedModel(data.current && models.includes(data.current) ? data.current : models[0]);
+      } catch {
+        if (!cancelled) {
+          setModelOptions(["o3"]);
+          setSelectedModel("o3");
+        }
+      }
+    }
+
+    void loadModels();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const sources = useMemo(() => searchData?.results ?? [], [searchData]);
@@ -124,7 +156,7 @@ export default function HomePage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages, webSearch })
+        body: JSON.stringify({ messages: nextMessages, webSearch, model: selectedModel })
       });
       const data = await res.json();
       setChatMessages([...nextMessages, { role: "assistant", content: data.message ?? "没有拿到有效回复。" }]);
@@ -259,6 +291,9 @@ export default function HomePage() {
             chatLoading={chatLoading}
             webSearch={webSearch}
             setWebSearch={setWebSearch}
+            modelOptions={modelOptions}
+            selectedModel={selectedModel}
+            setSelectedModel={setSelectedModel}
             sendChat={sendChat}
             generateArticle={generateArticle}
             articleLoading={articleLoading}
@@ -508,6 +543,9 @@ function ChatView({
   chatLoading,
   webSearch,
   setWebSearch,
+  modelOptions,
+  selectedModel,
+  setSelectedModel,
   sendChat,
   generateArticle,
   articleLoading
@@ -518,6 +556,9 @@ function ChatView({
   chatLoading: boolean;
   webSearch: boolean;
   setWebSearch: (value: boolean | ((current: boolean) => boolean)) => void;
+  modelOptions: string[];
+  selectedModel: string;
+  setSelectedModel: (value: string) => void;
   sendChat: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   generateArticle: (prompt?: string) => Promise<void>;
   articleLoading: boolean;
@@ -528,6 +569,16 @@ function ChatView({
         <span>AI 对话</span>
         <h2>知识学习助手</h2>
         <p>支持联网搜索、新闻理解、文学和哲学问题讨论，也能把当前材料整理成文章。</p>
+        <label className="model-picker">
+          <span>模型</span>
+          <select value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)}>
+            {modelOptions.map((model) => (
+              <option value={model} key={model}>
+                {model}
+              </option>
+            ))}
+          </select>
+        </label>
         <button className={webSearch ? "chip active full" : "chip full"} onClick={() => setWebSearch((value) => !value)}>
           <Globe2 size={15} /> {webSearch ? "联网搜索已开启" : "联网搜索已关闭"}
         </button>
@@ -545,7 +596,7 @@ function ChatView({
           <Bot size={24} />
           <div>
             <h1>ChatGreen AI</h1>
-            <p>{webSearch ? "联网模式，会优先检索来源再回答。" : "普通模式，只基于模型自身能力回答。"}</p>
+            <p>{selectedModel} · {webSearch ? "联网模式，会优先检索来源再回答。" : "普通模式，只基于模型自身能力回答。"}</p>
           </div>
         </div>
         <div className="chat-transcript">

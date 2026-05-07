@@ -3,6 +3,7 @@ import type { NewsResult } from "./types";
 export type LocalChatMessage = {
   role: "user" | "assistant";
   content: string;
+  imageDataUrl?: string;
   createdAt: number;
 };
 
@@ -114,7 +115,7 @@ export function newChatSession(model: string, mode: "normal" | "web"): LocalChat
     messages: [
       {
         role: "assistant",
-        content: "你好，我可以帮你检索新闻、整理资料，也会把这次对话保存在本机浏览器里。",
+        content: "你好，我可以帮你检索新闻、整理资料，也可以识别你上传的图片。对话会保存在本机浏览器里。",
         createdAt: now
       }
     ],

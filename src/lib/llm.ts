@@ -61,12 +61,11 @@ export async function summarizeSources(query: string, sources: NewsResult[], tav
     [
       {
         role: "system",
-        content:
-          "你是新闻研究助理。只基于提供的来源做中文摘要；不要编造来源中没有的信息。结尾列出“引用来源”，使用 [1] 标号和 URL。"
+        content: "你是新闻研究助手。请基于来源材料生成中文摘要，避免编造信息。必要时使用 [1] 这样的编号引用来源。"
       },
       {
         role: "user",
-        content: `用户问题：${query}\n\nTavily 初步答案：${tavilyAnswer ?? "无"}\n\n来源：\n${sourceContext(sources)}`
+        content: `用户问题：${query}\n\nTavily 初步回答：${tavilyAnswer ?? "无"}\n\n来源：\n${sourceContext(sources)}`
       }
     ],
     0.2

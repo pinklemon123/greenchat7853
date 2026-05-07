@@ -13,6 +13,7 @@ import {
   Globe2,
   History,
   Home,
+  ImagePlus,
   LogIn,
   Menu,
   MessageSquare,
@@ -30,7 +31,7 @@ import {
   UserRound,
   Wifi
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import {
   localData,
   newChatSession,
@@ -67,7 +68,13 @@ type ModelListResponse = {
   models?: string[];
   normalModels?: string[];
   webModels?: string[];
+  visionModels?: string[];
   current?: string;
+};
+
+type AttachedImage = {
+  dataUrl: string;
+  name: string;
 };
 
 const navItems: Array<{ key: PageKey; label: string; icon: typeof Home; description: string }> = [
@@ -88,6 +95,37 @@ const articleSeeds = [
 
 function nowMessage(role: LocalChatMessage["role"], content: string): LocalChatMessage {
   return { role, content, createdAt: Date.now() };
+}
+
+function imageMessage(content: string, imageDataUrl: string): LocalChatMessage {
+  return { role: "user", content, imageDataUrl, createdAt: Date.now() };
+}
+
+function resizeImage(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error("无法读取图片"));
+      image.onload = () => {
+        const maxSize = 1280;
+        const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const context = canvas.getContext("2d");
+        if (!context) {
+          reject(new Error("当前浏览器不支持图片处理"));
+          return;
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.84));
+      };
+      image.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function formatTime(value: number) {
@@ -123,15 +161,22 @@ export default function HomePage() {
   const [modelMode, setModelMode] = useState<ModelMode>("normal");
   const [normalModels, setNormalModels] = useState<string[]>(["o3"]);
   const [webModels, setWebModels] = useState<string[]>([]);
+  const [visionModels, setVisionModels] = useState<string[]>(["gpt-4o"]);
   const [selectedNormalModel, setSelectedNormalModel] = useState("o3");
   const [selectedWebModel, setSelectedWebModel] = useState("");
+  const [selectedVisionModel, setSelectedVisionModel] = useState("gpt-4o");
+  const [attachedImage, setAttachedImage] = useState<AttachedImage | null>(null);
   const [chatSessions, setChatSessions] = useState<LocalChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState("");
   const [searchHistory, setSearchHistory] = useState<LocalSearchRecord[]>([]);
   const [readHistory, setReadHistory] = useState<LocalReadRecord[]>([]);
   const [favorites, setFavorites] = useState<LocalFavorite[]>([]);
 
-  const activeModel = modelMode === "web" ? selectedWebModel || selectedNormalModel : selectedNormalModel;
+  const activeModel = attachedImage
+    ? selectedVisionModel || selectedNormalModel
+    : modelMode === "web"
+    ? selectedWebModel || selectedNormalModel
+    : selectedNormalModel;
   const activeSession = chatSessions.find((session) => session.id === activeChatId) ?? chatSessions[0];
   const chatMessages = activeSession?.messages ?? [];
   const sources = useMemo(() => searchData?.results ?? [], [searchData]);
@@ -154,16 +199,21 @@ export default function HomePage() {
         const data = (await res.json()) as ModelListResponse;
         const nextNormal = data.normalModels?.length ? data.normalModels : data.models?.length ? data.models : ["o3"];
         const nextWeb = data.webModels ?? [];
+        const nextVision = data.visionModels?.length ? data.visionModels : ["gpt-4o", "gpt-4o-mini"];
         if (cancelled) return;
         setNormalModels(nextNormal);
         setWebModels(nextWeb);
+        setVisionModels(nextVision);
         setSelectedNormalModel(data.current && nextNormal.includes(data.current) ? data.current : nextNormal[0]);
         setSelectedWebModel(nextWeb[0] ?? "");
+        setSelectedVisionModel(nextVision.includes("gpt-4o") ? "gpt-4o" : nextVision[0]);
       } catch {
         if (!cancelled) {
           setNormalModels(["o3"]);
           setWebModels([]);
+          setVisionModels(["gpt-4o"]);
           setSelectedNormalModel("o3");
+          setSelectedVisionModel("gpt-4o");
         }
       }
     }
@@ -244,11 +294,11 @@ export default function HomePage() {
 
   async function sendChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() && !attachedImage) return;
 
-    const userText = chatInput.trim();
+    const userText = chatInput.trim() || "请分析这张图片。";
     const base = activeSession ?? newChatSession(activeModel, modelMode);
-    const userMessage = nowMessage("user", userText);
+    const userMessage = attachedImage ? imageMessage(userText, attachedImage.dataUrl) : nowMessage("user", userText);
     const pending: LocalChatSession = {
       ...base,
       model: activeModel,
@@ -259,6 +309,7 @@ export default function HomePage() {
     };
 
     setChatInput("");
+    setAttachedImage(null);
     setChatLoading(true);
     await persistSession(pending);
 
@@ -267,7 +318,7 @@ export default function HomePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: pending.messages.map(({ role, content }) => ({ role, content })),
+          messages: pending.messages.map(({ role, content, imageDataUrl }) => ({ role, content, imageDataUrl })),
           webSearch: modelMode === "web",
           model: activeModel
         })
@@ -285,6 +336,22 @@ export default function HomePage() {
     } finally {
       setChatLoading(false);
     }
+  }
+
+  async function attachImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("请选择图片文件。");
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      alert("图片太大，请选择 12MB 以内的图片。");
+      return;
+    }
+    const dataUrl = await resizeImage(file);
+    setAttachedImage({ dataUrl, name: file.name });
   }
 
   async function generateArticle(prompt = articlePrompt) {
@@ -438,11 +505,17 @@ export default function HomePage() {
             setModelMode={setModelMode}
             normalModels={normalModels}
             webModels={webModels}
+            visionModels={visionModels}
             selectedNormalModel={selectedNormalModel}
             selectedWebModel={selectedWebModel}
+            selectedVisionModel={selectedVisionModel}
             setSelectedNormalModel={setSelectedNormalModel}
             setSelectedWebModel={setSelectedWebModel}
+            setSelectedVisionModel={setSelectedVisionModel}
             activeModel={activeModel}
+            attachedImage={attachedImage}
+            attachImage={attachImage}
+            clearAttachedImage={() => setAttachedImage(null)}
             sendChat={sendChat}
             generateArticle={generateArticle}
             articleLoading={articleLoading}
@@ -782,11 +855,17 @@ function ChatView({
   setModelMode,
   normalModels,
   webModels,
+  visionModels,
   selectedNormalModel,
   selectedWebModel,
+  selectedVisionModel,
   setSelectedNormalModel,
   setSelectedWebModel,
+  setSelectedVisionModel,
   activeModel,
+  attachedImage,
+  attachImage,
+  clearAttachedImage,
   sendChat,
   generateArticle,
   articleLoading
@@ -804,11 +883,17 @@ function ChatView({
   setModelMode: (value: ModelMode) => void;
   normalModels: string[];
   webModels: string[];
+  visionModels: string[];
   selectedNormalModel: string;
   selectedWebModel: string;
+  selectedVisionModel: string;
   setSelectedNormalModel: (value: string) => void;
   setSelectedWebModel: (value: string) => void;
+  setSelectedVisionModel: (value: string) => void;
   activeModel: string;
+  attachedImage: AttachedImage | null;
+  attachImage: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  clearAttachedImage: () => void;
   sendChat: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   generateArticle: (prompt?: string) => Promise<void>;
   articleLoading: boolean;
@@ -866,6 +951,18 @@ function ChatView({
               ))}
             </select>
           </label>
+          {attachedImage ? (
+            <label className="model-picker">
+              <span>图片识别模型</span>
+              <select value={selectedVisionModel} onChange={(event) => setSelectedVisionModel(event.target.value)}>
+                {visionModels.map((model) => (
+                  <option value={model} key={model}>
+                    {model}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <small className="hint">{modelMode === "web" ? "联网模型会直接使用模型内置搜索。" : "普通模型会基于模型自身能力回答。"}</small>
         </div>
 
@@ -890,7 +987,10 @@ function ChatView({
           {chatMessages.map((message, index) => (
             <div className={`chat-row ${message.role}`} key={`${message.role}-${message.createdAt}-${index}`}>
               <div className="avatar">{message.role === "assistant" ? "AI" : "你"}</div>
-              <div className="message-card">{message.content}</div>
+              <div className="message-card">
+                {message.imageDataUrl ? <img className="message-image" src={message.imageDataUrl} alt="上传的图片" /> : null}
+                <div>{message.content}</div>
+              </div>
             </div>
           ))}
           {chatLoading ? (
@@ -901,6 +1001,19 @@ function ChatView({
           ) : null}
         </div>
         <form className="chat-composer" onSubmit={sendChat}>
+          {attachedImage ? (
+            <div className="attached-image">
+              <img src={attachedImage.dataUrl} alt={attachedImage.name} />
+              <span>{attachedImage.name}</span>
+              <button type="button" onClick={clearAttachedImage} aria-label="移除图片">
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ) : null}
+          <label className="icon-button image-upload" aria-label="上传图片">
+            <ImagePlus size={18} />
+            <input type="file" accept="image/*" onChange={(event) => void attachImage(event)} />
+          </label>
           <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="问一个新闻、学习或资料整理问题" />
           <button className="icon-button active" type="submit" aria-label="发送" disabled={chatLoading}>
             <Send size={18} />

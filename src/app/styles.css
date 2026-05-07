@@ -829,6 +829,16 @@ textarea {
   background: rgba(255, 255, 255, 0.055);
 }
 
+.message-image {
+  display: block;
+  max-width: min(420px, 100%);
+  max-height: 320px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  object-fit: contain;
+}
+
 .chat-row.user .message-card {
   color: #071512;
   background: linear-gradient(135deg, var(--accent-2), var(--accent));
@@ -837,6 +847,7 @@ textarea {
 
 .chat-composer {
   gap: 12px;
+  flex-wrap: wrap;
   padding: 18px;
   border-top: 1px solid var(--line);
 }
@@ -845,6 +856,51 @@ textarea {
   flex: 1;
   min-width: 0;
   padding: 15px 16px;
+}
+
+.image-upload {
+  flex: 0 0 42px;
+}
+
+.image-upload input {
+  display: none;
+}
+
+.attached-image {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.attached-image img {
+  width: 54px;
+  height: 54px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.attached-image span {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attached-image button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 
 .login-card {

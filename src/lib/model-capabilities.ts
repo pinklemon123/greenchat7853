@@ -98,6 +98,7 @@ const nonChatMarkers = [
 ];
 
 const webSearchMarkers = ["search", "deepsearch", "deepersearch", "sonar"];
+const visionMarkers = ["vision", "vl", "internvl", "gpt-4o", "gpt-4.1", "gemini", "claude"];
 
 export function isChatModel(model: string) {
   const id = model.toLowerCase();
@@ -109,11 +110,17 @@ export function isWebSearchModel(model: string) {
   return isChatModel(model) && webSearchMarkers.some((marker) => id.includes(marker));
 }
 
+export function isVisionModel(model: string) {
+  const id = model.toLowerCase();
+  return isChatModel(model) && visionMarkers.some((marker) => id.includes(marker));
+}
+
 export function splitModels(models: string[]) {
   const uniqueModels = Array.from(new Set(models.filter(isChatModel))).sort((a, b) => a.localeCompare(b));
   return {
     models: uniqueModels,
     normalModels: uniqueModels.filter((model) => !isWebSearchModel(model)),
-    webModels: uniqueModels.filter(isWebSearchModel)
+    webModels: uniqueModels.filter(isWebSearchModel),
+    visionModels: uniqueModels.filter(isVisionModel)
   };
 }

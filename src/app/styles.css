@@ -829,6 +829,90 @@ textarea {
   background: rgba(255, 255, 255, 0.055);
 }
 
+.chat-row.assistant .message-card {
+  max-width: min(1120px, 94%);
+}
+
+.message-text {
+  white-space: pre-wrap;
+}
+
+.document-chip {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  max-width: 100%;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  color: var(--accent-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(138, 203, 163, 0.08);
+  white-space: normal;
+}
+
+.document-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-sources {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  white-space: normal;
+}
+
+.message-sources-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--accent-2);
+}
+
+.message-sources-title span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.message-source-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.message-source-list a {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  color: var(--ink);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.message-source-list span {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.message-source-list strong,
+.message-source-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-source-list small {
+  color: var(--muted);
+}
+
 .message-image {
   display: block;
   max-width: min(420px, 100%);
@@ -876,6 +960,40 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.045);
+}
+
+.attached-document {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.attached-document span {
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attached-document small {
+  color: var(--muted);
+}
+
+.attached-document button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 
 .attached-image img {

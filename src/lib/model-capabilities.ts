@@ -2,6 +2,8 @@ export const fallbackModels = [
   "o3",
   "o3-mini",
   "o4-mini",
+  "gpt-4o-all",
+  "gpt-4-all",
   "gpt-4o",
   "gpt-4o-mini",
   "gpt-5",
@@ -99,6 +101,8 @@ const nonChatMarkers = [
 
 const webSearchMarkers = ["search", "deepsearch", "deepersearch", "sonar"];
 const visionMarkers = ["vision", "vl", "internvl", "gpt-4o", "gpt-4.1", "gemini", "claude"];
+const documentModelIds = ["gpt-4o-all", "gpt-4-all"];
+const documentMarkers = ["pdf", "file", "document"];
 
 export function isChatModel(model: string) {
   const id = model.toLowerCase();
@@ -115,12 +119,21 @@ export function isVisionModel(model: string) {
   return isChatModel(model) && visionMarkers.some((marker) => id.includes(marker));
 }
 
+export function isDocumentModel(model: string) {
+  const id = model.toLowerCase();
+  return (
+    isChatModel(model) &&
+    (documentModelIds.includes(id) || documentMarkers.some((marker) => id.includes(marker)) || id.startsWith("claude-") || id.startsWith("gemini-"))
+  );
+}
+
 export function splitModels(models: string[]) {
   const uniqueModels = Array.from(new Set(models.filter(isChatModel))).sort((a, b) => a.localeCompare(b));
   return {
     models: uniqueModels,
     normalModels: uniqueModels.filter((model) => !isWebSearchModel(model)),
     webModels: uniqueModels.filter(isWebSearchModel),
-    visionModels: uniqueModels.filter(isVisionModel)
+    visionModels: uniqueModels.filter(isVisionModel),
+    documentModels: uniqueModels.filter(isDocumentModel)
   };
 }

@@ -10,6 +10,7 @@ import {
   Download,
   ExternalLink,
   FilePenLine,
+  FileText,
   Globe2,
   History,
   Home,
@@ -44,7 +45,7 @@ import {
 } from "@/lib/local-data";
 
 type PageKey = "home" | "news" | "daily" | "chat" | "login";
-type ModelMode = "normal" | "web";
+type ModelMode = "normal" | "web" | "document";
 
 type NewsResult = {
   title: string;
@@ -69,12 +70,20 @@ type ModelListResponse = {
   normalModels?: string[];
   webModels?: string[];
   visionModels?: string[];
+  documentModels?: string[];
   current?: string;
 };
 
 type AttachedImage = {
   dataUrl: string;
   name: string;
+};
+
+type AttachedDocument = {
+  content: string;
+  name: string;
+  type: string;
+  size: number;
 };
 
 const navItems: Array<{ key: PageKey; label: string; icon: typeof Home; description: string }> = [
@@ -99,6 +108,10 @@ function nowMessage(role: LocalChatMessage["role"], content: string): LocalChatM
 
 function imageMessage(content: string, imageDataUrl: string): LocalChatMessage {
   return { role: "user", content, imageDataUrl, createdAt: Date.now() };
+}
+
+function documentMessage(content: string, document: AttachedDocument): LocalChatMessage {
+  return { role: "user", content, documentName: document.name, documentContent: document.content, createdAt: Date.now() };
 }
 
 function resizeImage(file: File) {
@@ -162,10 +175,13 @@ export default function HomePage() {
   const [normalModels, setNormalModels] = useState<string[]>(["o3"]);
   const [webModels, setWebModels] = useState<string[]>([]);
   const [visionModels, setVisionModels] = useState<string[]>(["gpt-4o"]);
+  const [documentModels, setDocumentModels] = useState<string[]>(["gpt-4o-all", "gpt-4-all"]);
   const [selectedNormalModel, setSelectedNormalModel] = useState("o3");
   const [selectedWebModel, setSelectedWebModel] = useState("");
   const [selectedVisionModel, setSelectedVisionModel] = useState("gpt-4o");
+  const [selectedDocumentModel, setSelectedDocumentModel] = useState("gpt-4o-all");
   const [attachedImage, setAttachedImage] = useState<AttachedImage | null>(null);
+  const [attachedDocument, setAttachedDocument] = useState<AttachedDocument | null>(null);
   const [chatSessions, setChatSessions] = useState<LocalChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState("");
   const [searchHistory, setSearchHistory] = useState<LocalSearchRecord[]>([]);
@@ -174,6 +190,8 @@ export default function HomePage() {
 
   const activeModel = attachedImage
     ? selectedVisionModel || selectedNormalModel
+    : modelMode === "document"
+    ? selectedDocumentModel || selectedNormalModel
     : modelMode === "web"
     ? selectedWebModel || selectedNormalModel
     : selectedNormalModel;
@@ -200,20 +218,25 @@ export default function HomePage() {
         const nextNormal = data.normalModels?.length ? data.normalModels : data.models?.length ? data.models : ["o3"];
         const nextWeb = data.webModels ?? [];
         const nextVision = data.visionModels?.length ? data.visionModels : ["gpt-4o", "gpt-4o-mini"];
+        const nextDocument = data.documentModels?.length ? data.documentModels : ["gpt-4o-all", "gpt-4-all", ...nextNormal];
         if (cancelled) return;
         setNormalModels(nextNormal);
         setWebModels(nextWeb);
         setVisionModels(nextVision);
+        setDocumentModels(nextDocument);
         setSelectedNormalModel(data.current && nextNormal.includes(data.current) ? data.current : nextNormal[0]);
         setSelectedWebModel(nextWeb[0] ?? "");
         setSelectedVisionModel(nextVision.includes("gpt-4o") ? "gpt-4o" : nextVision[0]);
+        setSelectedDocumentModel(nextDocument.includes("gpt-4o-all") ? "gpt-4o-all" : nextDocument[0]);
       } catch {
         if (!cancelled) {
           setNormalModels(["o3"]);
           setWebModels([]);
           setVisionModels(["gpt-4o"]);
+          setDocumentModels(["gpt-4o-all", "gpt-4-all"]);
           setSelectedNormalModel("o3");
           setSelectedVisionModel("gpt-4o");
+          setSelectedDocumentModel("gpt-4o-all");
         }
       }
     }
@@ -294,11 +317,15 @@ export default function HomePage() {
 
   async function sendChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!chatInput.trim() && !attachedImage) return;
+    if (!chatInput.trim() && !attachedImage && !attachedDocument) return;
 
-    const userText = chatInput.trim() || "请分析这张图片。";
+    const userText = chatInput.trim() || (attachedDocument ? "请阅读并总结这份文档。" : "请分析这张图片。");
     const base = activeSession ?? newChatSession(activeModel, modelMode);
-    const userMessage = attachedImage ? imageMessage(userText, attachedImage.dataUrl) : nowMessage("user", userText);
+    const userMessage = attachedImage
+      ? imageMessage(userText, attachedImage.dataUrl)
+      : attachedDocument
+      ? documentMessage(userText, attachedDocument)
+      : nowMessage("user", userText);
     const pending: LocalChatSession = {
       ...base,
       model: activeModel,
@@ -310,6 +337,7 @@ export default function HomePage() {
 
     setChatInput("");
     setAttachedImage(null);
+    setAttachedDocument(null);
     setChatLoading(true);
     await persistSession(pending);
 
@@ -318,15 +346,26 @@ export default function HomePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: pending.messages.map(({ role, content, imageDataUrl }) => ({ role, content, imageDataUrl })),
+          messages: pending.messages.map(({ role, content, imageDataUrl, documentName, documentContent }) => ({
+            role,
+            content,
+            imageDataUrl,
+            documentName,
+            documentContent
+          })),
           webSearch: modelMode === "web",
+          documentMode: modelMode === "document",
           model: activeModel
         })
       });
       const data = await res.json();
+      const assistantMessage = nowMessage("assistant", data.message ?? "没有拿到有效回复。");
+      if (Array.isArray(data.sources) && data.sources.length) {
+        assistantMessage.sources = data.sources;
+      }
       const completed: LocalChatSession = {
         ...pending,
-        messages: [...pending.messages, nowMessage("assistant", data.message ?? "没有拿到有效回复。")],
+        messages: [...pending.messages, assistantMessage],
         updatedAt: Date.now()
       };
       await persistSession(completed);
@@ -352,6 +391,32 @@ export default function HomePage() {
     }
     const dataUrl = await resizeImage(file);
     setAttachedImage({ dataUrl, name: file.name });
+  }
+
+  async function attachDocument(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert("文档太大，请选择 2MB 以内的文本类文件。");
+      return;
+    }
+
+    const lowerName = file.name.toLowerCase();
+    const readable =
+      file.type.startsWith("text/") ||
+      [".txt", ".md", ".csv", ".json", ".xml", ".html", ".htm", ".log", ".ts", ".tsx", ".js", ".jsx", ".css", ".py", ".java", ".go", ".rs"].some((ext) =>
+        lowerName.endsWith(ext)
+      );
+
+    if (!readable) {
+      alert("当前本地上传先支持文本类文档；PDF/Word 可以在文档模式里直接粘贴可访问的文件 URL 让文件模型读取。");
+      return;
+    }
+
+    const content = (await file.text()).slice(0, 65000);
+    setAttachedDocument({ content, name: file.name, type: file.type || "text/plain", size: file.size });
+    setModelMode("document");
   }
 
   async function generateArticle(prompt = articlePrompt) {
@@ -506,16 +571,22 @@ export default function HomePage() {
             normalModels={normalModels}
             webModels={webModels}
             visionModels={visionModels}
+            documentModels={documentModels}
             selectedNormalModel={selectedNormalModel}
             selectedWebModel={selectedWebModel}
             selectedVisionModel={selectedVisionModel}
+            selectedDocumentModel={selectedDocumentModel}
             setSelectedNormalModel={setSelectedNormalModel}
             setSelectedWebModel={setSelectedWebModel}
             setSelectedVisionModel={setSelectedVisionModel}
+            setSelectedDocumentModel={setSelectedDocumentModel}
             activeModel={activeModel}
             attachedImage={attachedImage}
+            attachedDocument={attachedDocument}
             attachImage={attachImage}
+            attachDocument={attachDocument}
             clearAttachedImage={() => setAttachedImage(null)}
+            clearAttachedDocument={() => setAttachedDocument(null)}
             sendChat={sendChat}
             generateArticle={generateArticle}
             articleLoading={articleLoading}
@@ -856,16 +927,22 @@ function ChatView({
   normalModels,
   webModels,
   visionModels,
+  documentModels,
   selectedNormalModel,
   selectedWebModel,
   selectedVisionModel,
+  selectedDocumentModel,
   setSelectedNormalModel,
   setSelectedWebModel,
   setSelectedVisionModel,
+  setSelectedDocumentModel,
   activeModel,
   attachedImage,
+  attachedDocument,
   attachImage,
+  attachDocument,
   clearAttachedImage,
+  clearAttachedDocument,
   sendChat,
   generateArticle,
   articleLoading
@@ -884,20 +961,31 @@ function ChatView({
   normalModels: string[];
   webModels: string[];
   visionModels: string[];
+  documentModels: string[];
   selectedNormalModel: string;
   selectedWebModel: string;
   selectedVisionModel: string;
+  selectedDocumentModel: string;
   setSelectedNormalModel: (value: string) => void;
   setSelectedWebModel: (value: string) => void;
   setSelectedVisionModel: (value: string) => void;
+  setSelectedDocumentModel: (value: string) => void;
   activeModel: string;
   attachedImage: AttachedImage | null;
+  attachedDocument: AttachedDocument | null;
   attachImage: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  attachDocument: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   clearAttachedImage: () => void;
+  clearAttachedDocument: () => void;
   sendChat: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   generateArticle: (prompt?: string) => Promise<void>;
   articleLoading: boolean;
 }) {
+  const pickerModels =
+    modelMode === "web" ? (webModels.length ? webModels : normalModels) : modelMode === "document" ? documentModels : normalModels;
+  const pickerValue =
+    modelMode === "web" ? selectedWebModel || selectedNormalModel : modelMode === "document" ? selectedDocumentModel : selectedNormalModel;
+
   return (
     <section className="chat-page">
       <aside className="chat-sidebar">
@@ -934,17 +1022,26 @@ function ChatView({
             <button className={modelMode === "normal" ? "selected" : ""} onClick={() => setModelMode("normal")}>
               <Bot size={16} /> 普通
             </button>
-            <button className={modelMode === "web" ? "selected" : ""} onClick={() => setModelMode("web")} disabled={!webModels.length}>
+            <button className={modelMode === "web" ? "selected" : ""} onClick={() => setModelMode("web")}>
               <Wifi size={16} /> 联网
+            </button>
+            <button className={modelMode === "document" ? "selected" : ""} onClick={() => setModelMode("document")}>
+              <FileText size={16} /> 文档
             </button>
           </div>
           <label className="model-picker">
-            <span>{modelMode === "web" ? "联网模型" : "对话模型"}</span>
+            <span>{modelMode === "web" ? "联网模型" : modelMode === "document" ? "文档模型" : "对话模型"}</span>
             <select
-              value={modelMode === "web" ? selectedWebModel : selectedNormalModel}
-              onChange={(event) => (modelMode === "web" ? setSelectedWebModel(event.target.value) : setSelectedNormalModel(event.target.value))}
+              value={pickerValue}
+              onChange={(event) =>
+                modelMode === "web"
+                  ? setSelectedWebModel(event.target.value)
+                  : modelMode === "document"
+                  ? setSelectedDocumentModel(event.target.value)
+                  : setSelectedNormalModel(event.target.value)
+              }
             >
-              {(modelMode === "web" ? webModels : normalModels).map((model) => (
+              {pickerModels.map((model) => (
                 <option value={model} key={model}>
                   {model}
                 </option>
@@ -963,7 +1060,15 @@ function ChatView({
               </select>
             </label>
           ) : null}
-          <small className="hint">{modelMode === "web" ? "联网模型会直接使用模型内置搜索。" : "普通模型会基于模型自身能力回答。"}</small>
+          <small className="hint">
+            {modelMode === "web"
+              ? webModels.length
+                ? "联网模型会直接使用模型内置搜索。"
+                : "没有内置联网模型时，会用 Tavily 搜索后把来源一起交给对话模型。"
+              : modelMode === "document"
+              ? "可上传文本类文档；PDF/Word 可粘贴公开文件 URL 交给文件模型读取。"
+              : "普通模型会基于模型自身能力回答。"}
+          </small>
         </div>
 
         <button
@@ -980,7 +1085,7 @@ function ChatView({
           <Bot size={24} />
           <div>
             <h1>ChatGreen AI</h1>
-            <p>{activeModel} · {modelMode === "web" ? "联网模型" : "普通对话"}</p>
+            <p>{activeModel} · {modelMode === "web" ? "联网搜索" : modelMode === "document" ? "文档阅读" : "普通对话"}</p>
           </div>
         </div>
         <div className="chat-transcript">
@@ -989,7 +1094,14 @@ function ChatView({
               <div className="avatar">{message.role === "assistant" ? "AI" : "你"}</div>
               <div className="message-card">
                 {message.imageDataUrl ? <img className="message-image" src={message.imageDataUrl} alt="上传的图片" /> : null}
-                <div>{message.content}</div>
+                {message.documentName ? (
+                  <div className="document-chip">
+                    <FileText size={16} />
+                    <span>{message.documentName}</span>
+                  </div>
+                ) : null}
+                <div className="message-text">{message.content}</div>
+                {message.sources?.length ? <MessageSources sources={message.sources} /> : null}
               </div>
             </div>
           ))}
@@ -1010,9 +1122,23 @@ function ChatView({
               </button>
             </div>
           ) : null}
+          {attachedDocument ? (
+            <div className="attached-document">
+              <FileText size={18} />
+              <span>{attachedDocument.name}</span>
+              <small>{Math.ceil(attachedDocument.size / 1024)} KB</small>
+              <button type="button" onClick={clearAttachedDocument} aria-label="移除文档">
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ) : null}
           <label className="icon-button image-upload" aria-label="上传图片">
             <ImagePlus size={18} />
             <input type="file" accept="image/*" onChange={(event) => void attachImage(event)} />
+          </label>
+          <label className="icon-button image-upload" aria-label="上传文档">
+            <FileText size={18} />
+            <input type="file" accept=".txt,.md,.csv,.json,.xml,.html,.htm,.log,.ts,.tsx,.js,.jsx,.css,.py,.java,.go,.rs,text/*" onChange={(event) => void attachDocument(event)} />
           </label>
           <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="问一个新闻、学习或资料整理问题" />
           <button className="icon-button active" type="submit" aria-label="发送" disabled={chatLoading}>
@@ -1021,6 +1147,27 @@ function ChatView({
         </form>
       </section>
     </section>
+  );
+}
+
+function MessageSources({ sources }: { sources: NewsResult[] }) {
+  return (
+    <div className="message-sources">
+      <div className="message-sources-title">
+        <Globe2 size={16} />
+        <strong>来源链接</strong>
+        <span>{sources.length} 条</span>
+      </div>
+      <div className="message-source-list">
+        {sources.map((source, index) => (
+          <a href={source.url} target="_blank" rel="noreferrer" key={`${source.url}-${index}`}>
+            <span>[{index + 1}] {source.source ?? hostName(source.url)}</span>
+            <strong>{source.title}</strong>
+            <small>{source.url}</small>
+          </a>
+        ))}
+      </div>
+    </div>
   );
 }
 

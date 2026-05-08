@@ -4,6 +4,9 @@ export type LocalChatMessage = {
   role: "user" | "assistant";
   content: string;
   imageDataUrl?: string;
+  documentName?: string;
+  documentContent?: string;
+  sources?: NewsResult[];
   createdAt: number;
 };
 
@@ -11,7 +14,7 @@ export type LocalChatSession = {
   id: string;
   title: string;
   model: string;
-  mode: "normal" | "web";
+  mode: "normal" | "web" | "document";
   messages: LocalChatMessage[];
   createdAt: number;
   updatedAt: number;
@@ -105,7 +108,7 @@ async function deleteStore(storeName: StoreName, id: string) {
   await withStore<undefined>(storeName, "readwrite", (store) => store.delete(id));
 }
 
-export function newChatSession(model: string, mode: "normal" | "web"): LocalChatSession {
+export function newChatSession(model: string, mode: "normal" | "web" | "document"): LocalChatSession {
   const now = Date.now();
   return {
     id: createId("chat"),

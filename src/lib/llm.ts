@@ -9,7 +9,7 @@ type ChatCompletionResponse = {
   }>;
 };
 
-export async function completeChat(messages: ChatMessage[], temperature = 0.3, requestedModel?: string) {
+export async function completeChat(messages: ChatMessage[], temperature = 0.3, requestedModel?: string, maxTokens = 1800) {
   const apiKey = process.env.OPENAI_API_KEY;
   const model = requestedModel?.trim() || configuredModel();
 
@@ -27,7 +27,7 @@ export async function completeChat(messages: ChatMessage[], temperature = 0.3, r
       model,
       messages,
       temperature,
-      max_tokens: 1200
+      max_tokens: maxTokens
     }),
     cache: "no-store"
   });
@@ -68,6 +68,8 @@ export async function summarizeSources(query: string, sources: NewsResult[], tav
         content: `用户问题：${query}\n\nTavily 初步回答：${tavilyAnswer ?? "无"}\n\n来源：\n${sourceContext(sources)}`
       }
     ],
-    0.2
+    0.2,
+    undefined,
+    2200
   );
 }

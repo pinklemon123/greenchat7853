@@ -74,6 +74,10 @@ type ModelListResponse = {
   current?: string;
 };
 
+type ApiErrorResponse = {
+  error?: string;
+};
+
 type AttachedImage = {
   dataUrl: string;
   name: string;
@@ -172,11 +176,11 @@ export default function HomePage() {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [modelMode, setModelMode] = useState<ModelMode>("normal");
-  const [normalModels, setNormalModels] = useState<string[]>(["o3"]);
+  const [normalModels, setNormalModels] = useState<string[]>(["gpt-5.5"]);
   const [webModels, setWebModels] = useState<string[]>([]);
   const [visionModels, setVisionModels] = useState<string[]>(["gpt-4o"]);
   const [documentModels, setDocumentModels] = useState<string[]>(["gpt-4o-all", "gpt-4-all"]);
-  const [selectedNormalModel, setSelectedNormalModel] = useState("o3");
+  const [selectedNormalModel, setSelectedNormalModel] = useState("gpt-5.5");
   const [selectedWebModel, setSelectedWebModel] = useState("");
   const [selectedVisionModel, setSelectedVisionModel] = useState("gpt-4o");
   const [selectedDocumentModel, setSelectedDocumentModel] = useState("gpt-4o-all");
@@ -215,7 +219,7 @@ export default function HomePage() {
       try {
         const res = await fetch("/api/models", { cache: "no-store" });
         const data = (await res.json()) as ModelListResponse;
-        const nextNormal = data.normalModels?.length ? data.normalModels : data.models?.length ? data.models : ["o3"];
+        const nextNormal = data.normalModels?.length ? data.normalModels : data.models?.length ? data.models : ["gpt-5.5"];
         const nextWeb = data.webModels ?? [];
         const nextVision = data.visionModels?.length ? data.visionModels : ["gpt-4o", "gpt-4o-mini"];
         const nextDocument = data.documentModels?.length ? data.documentModels : ["gpt-4o-all", "gpt-4-all", ...nextNormal];
@@ -230,11 +234,11 @@ export default function HomePage() {
         setSelectedDocumentModel(nextDocument.includes("gpt-4o-all") ? "gpt-4o-all" : nextDocument[0]);
       } catch {
         if (!cancelled) {
-          setNormalModels(["o3"]);
+          setNormalModels(["gpt-5.5"]);
           setWebModels([]);
           setVisionModels(["gpt-4o"]);
           setDocumentModels(["gpt-4o-all", "gpt-4-all"]);
-          setSelectedNormalModel("o3");
+          setSelectedNormalModel("gpt-5.5");
           setSelectedVisionModel("gpt-4o");
           setSelectedDocumentModel("gpt-4o-all");
         }
@@ -358,7 +362,10 @@ export default function HomePage() {
           model: activeModel
         })
       });
-      const data = await res.json();
+      const data = (await res.json()) as Partial<{ message: string; sources: NewsResult[] }> & ApiErrorResponse;
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? `请求失败：${res.status}`);
+      }
       const assistantMessage = nowMessage("assistant", data.message ?? "没有拿到有效回复。");
       if (Array.isArray(data.sources) && data.sources.length) {
         assistantMessage.sources = data.sources;
@@ -372,6 +379,16 @@ export default function HomePage() {
       if (data.sources?.length) {
         setSearchData({ query: userText, results: data.sources, summary: data.message });
       }
+    } catch (error) {
+      const failed: LocalChatSession = {
+        ...pending,
+        messages: [
+          ...pending.messages,
+          nowMessage("assistant", `请求失败：${error instanceof Error ? error.message : "未知错误"}`)
+        ],
+        updatedAt: Date.now()
+      };
+      await persistSession(failed);
     } finally {
       setChatLoading(false);
     }

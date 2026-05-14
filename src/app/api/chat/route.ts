@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     const messages = incomingMessages.map(toChatMessage);
     const webSearch = body.webSearch !== false;
     const model = typeof body.model === "string" ? body.model : undefined;
-    const nativeWebSearch = Boolean(model && isWebSearchModel(model));
+    const nativeWebSearch = webSearch && Boolean(model && isWebSearchModel(model));
     const hasImages = incomingMessages.some((message) => Boolean(message.imageDataUrl));
     const hasDocuments = body.documentMode === true || incomingMessages.some((message) => Boolean(message.documentContent));
     const lastUser = [...incomingMessages].reverse().find((message) => message.role === "user")?.content ?? "";

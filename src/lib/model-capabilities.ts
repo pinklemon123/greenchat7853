@@ -1,4 +1,5 @@
 export const fallbackModels = [
+  "gpt-5.5",
   "o3",
   "o3-mini",
   "o4-mini",
@@ -14,7 +15,6 @@ export const fallbackModels = [
   "gpt-5.2-chat-latest",
   "gpt-5.4",
   "gpt-5.4-mini",
-  "gpt-5.5",
   "claude-sonnet-4-6",
   "claude-opus-4-6",
   "gemini-2.5-pro",
@@ -36,6 +36,8 @@ export const fallbackModels = [
   "sonar",
   "sonar-pro"
 ];
+
+const unavailableModels = new Set(["gpt-5-search-api"]);
 
 const chatPrefixes = [
   "o1",
@@ -106,7 +108,11 @@ const documentMarkers = ["pdf", "file", "document"];
 
 export function isChatModel(model: string) {
   const id = model.toLowerCase();
-  return chatPrefixes.some((prefix) => id.startsWith(prefix)) && !nonChatMarkers.some((marker) => id.includes(marker));
+  return (
+    chatPrefixes.some((prefix) => id.startsWith(prefix)) &&
+    !nonChatMarkers.some((marker) => id.includes(marker)) &&
+    !unavailableModels.has(id)
+  );
 }
 
 export function isWebSearchModel(model: string) {
@@ -128,11 +134,16 @@ export function isDocumentModel(model: string) {
 }
 
 export function splitModels(models: string[]) {
-  const uniqueModels = Array.from(new Set(models.filter(isChatModel))).sort((a, b) => a.localeCompare(b));
+  const uniqueModels = Array.from(new Set(models.filter(isChatModel))).sort((a, b) => {
+    if (a === "gpt-5.5") return -1;
+    if (b === "gpt-5.5") return 1;
+    return a.localeCompare(b);
+  });
+  const webModels = uniqueModels.filter(isWebSearchModel);
   return {
     models: uniqueModels,
     normalModels: uniqueModels.filter((model) => !isWebSearchModel(model)),
-    webModels: uniqueModels.filter(isWebSearchModel),
+    webModels: webModels.length ? webModels : uniqueModels,
     visionModels: uniqueModels.filter(isVisionModel),
     documentModels: uniqueModels.filter(isDocumentModel)
   };

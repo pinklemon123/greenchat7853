@@ -6,5 +6,5 @@ export function openAIEndpoint(path: string) {
 }
 
 export function configuredModel() {
-  return process.env.OPENAI_MODEL?.trim() || "o3";
+  return process.env.OPENAI_MODEL?.trim() || "gpt-5.5";
 }
